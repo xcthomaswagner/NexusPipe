@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ExternalLink, CheckCircle, XCircle, AlertCircle, ThumbsUp, ThumbsDown, Minus, GitMerge } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,9 @@ export function SourcesTable({ auditId }: SourcesTableProps) {
   const [sentimentFilter, setSentimentFilter] = useState<Sentiment | "all">("all");
   const [brandFilter, setBrandFilter] = useState<"all" | "yes" | "no">("all");
 
+  // Fetch sentiment breakdown for summary line
+  const { data: resultsData } = trpc.audit.getResults.useQuery({ id: auditId });
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     trpc.source.listByAudit.useInfiniteQuery(
       {
@@ -61,8 +64,40 @@ export function SourcesTable({ auditId }: SourcesTableProps) {
 
   const sources = data?.pages.flatMap((page) => page.sources) ?? [];
 
+  const sentimentBreakdown = resultsData?.sentimentBreakdown;
+  const totalSentiment = sentimentBreakdown
+    ? sentimentBreakdown.POSITIVE + sentimentBreakdown.NEGATIVE + sentimentBreakdown.NEUTRAL + sentimentBreakdown.MIXED
+    : 0;
+
   return (
     <div className="space-y-4">
+      {/* Sentiment Summary Line */}
+      {sentimentBreakdown && totalSentiment > 0 && (
+        <div className="flex items-center gap-6 text-sm py-2 px-3 bg-muted/30 rounded-lg border">
+          <span className="text-muted-foreground font-medium">Sentiment:</span>
+          <div className="flex items-center gap-1">
+            <ThumbsUp className="h-3.5 w-3.5 text-green-600" />
+            <span className="text-green-600 font-medium">{sentimentBreakdown.POSITIVE}</span>
+            <span className="text-muted-foreground">positive</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
+            <span className="text-red-600 font-medium">{sentimentBreakdown.NEGATIVE}</span>
+            <span className="text-muted-foreground">negative</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Minus className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="text-zinc-600 font-medium">{sentimentBreakdown.NEUTRAL}</span>
+            <span className="text-muted-foreground">neutral</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <GitMerge className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-amber-600 font-medium">{sentimentBreakdown.MIXED}</span>
+            <span className="text-muted-foreground">mixed</span>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-4">
         <Select
@@ -75,6 +110,7 @@ export function SourcesTable({ auditId }: SourcesTableProps) {
           <SelectContent>
             <SelectItem value="all">All Sentiments</SelectItem>
             <SelectItem value="POSITIVE">Positive</SelectItem>
+            <SelectItem value="NEGATIVE">Negative</SelectItem>
             <SelectItem value="NEUTRAL">Neutral</SelectItem>
             <SelectItem value="MIXED">Mixed</SelectItem>
           </SelectContent>
@@ -171,14 +207,18 @@ export function SourcesTable({ auditId }: SourcesTableProps) {
                         variant={
                           source.sentiment === "POSITIVE"
                             ? "default"
-                            : source.sentiment === "MIXED"
-                              ? "secondary"
-                              : "outline"
+                            : source.sentiment === "NEGATIVE"
+                              ? "destructive"
+                              : source.sentiment === "MIXED"
+                                ? "secondary"
+                                : "outline"
                         }
                         className={
                           source.sentiment === "POSITIVE"
                             ? "bg-green-100 text-green-800"
-                            : ""
+                            : source.sentiment === "NEGATIVE"
+                              ? "bg-red-100 text-red-800"
+                              : ""
                         }
                       >
                         {source.sentiment}

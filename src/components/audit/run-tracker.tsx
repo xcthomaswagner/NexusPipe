@@ -17,8 +17,8 @@ interface RunTrackerProps {
 
 const STAGES = [
   { key: "DISCOVERING", label: "Discovery" },
-  { key: "INGESTING", label: "Ingestion" },
-  { key: "SYNTHESIZING", label: "Synthesis" },
+  { key: "INGESTING", label: "Analyzing" },
+  { key: "SYNTHESIZING", label: "Synthesizing" },
   { key: "COMPLETED", label: "Complete" },
 ] as const;
 

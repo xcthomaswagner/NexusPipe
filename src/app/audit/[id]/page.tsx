@@ -31,6 +31,11 @@ import { ResultsDashboard } from "@/components/audit/results-dashboard";
 import { SourcesTable } from "@/components/audit/sources-table";
 import { InsightsPanel } from "@/components/audit/insights-panel";
 import { EditAuditDialog } from "@/components/audit/edit-audit-dialog";
+import { ShareOfVoice } from "@/components/audit/share-of-voice";
+import { AIPlatformResponses } from "@/components/audit/ai-platform-responses";
+import { AIQueryPanel } from "@/components/audit/ai-query-panel";
+import { AIVisibilityInsights } from "@/components/audit/ai-visibility-insights";
+import { PlatformStrategyCard } from "@/components/audit/platform-strategy-card";
 import { trpc } from "@/lib/trpc/client";
 import type { AuditDepth } from "@/lib/validation/audit";
 
@@ -52,6 +57,7 @@ export default function AuditDetailPage({
   const deleteAudit = trpc.audit.delete.useMutation({
     onSuccess: () => {
       router.push("/dashboard");
+      router.refresh(); // Force RSC to refetch audit list
     },
   });
 
@@ -251,6 +257,7 @@ export default function AuditDetailPage({
         <Tabs defaultValue="results">
           <TabsList className="mb-6">
             <TabsTrigger value="results">Results</TabsTrigger>
+            <TabsTrigger value="ai-visibility">AI Visibility</TabsTrigger>
             <TabsTrigger value="sources">All Sources</TabsTrigger>
             <TabsTrigger value="insights">
               <Sparkles className="mr-1 h-4 w-4" />
@@ -264,6 +271,10 @@ export default function AuditDetailPage({
 
           <TabsContent value="results">
             <ResultsDashboard auditId={id} onRerun={handleRerun} />
+          </TabsContent>
+
+          <TabsContent value="ai-visibility">
+            <AIVisibilityContent auditId={id} brandName={audit.brandName} />
           </TabsContent>
 
           <TabsContent value="sources">
@@ -404,6 +415,48 @@ export default function AuditDetailPage({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * AI Visibility tab content with SOV metrics and query panel.
+ */
+function AIVisibilityContent({
+  auditId,
+  brandName,
+}: {
+  auditId: string;
+  brandName: string;
+}) {
+  const { data: results } = trpc.audit.getResults.useQuery({ id: auditId });
+  const { data: auditData } = trpc.audit.getById.useQuery({ id: auditId });
+
+  return (
+    <div className="space-y-6">
+      {/* Platform Strategy */}
+      <PlatformStrategyCard auditId={auditId} />
+
+      {/* AI Test Query Panel */}
+      <AIQueryPanel
+        auditId={auditId}
+        brandName={brandName}
+        initialQueries={auditData?.aiTestQueries ?? []}
+      />
+
+      {/* Actionable Insights */}
+      <AIVisibilityInsights auditId={auditId} />
+
+      {/* Share of Voice Metrics */}
+      {results?.shareOfVoice && (
+        <ShareOfVoice
+          metrics={results.shareOfVoice}
+          brandName={brandName}
+        />
+      )}
+
+      {/* AI Platform Responses */}
+      <AIPlatformResponses auditId={auditId} />
     </div>
   );
 }

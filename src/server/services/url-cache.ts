@@ -172,3 +172,33 @@ export async function clearStaleCache(ttlDays: number = DEFAULT_TTL_DAYS): Promi
 
   return result.count;
 }
+
+/**
+ * Clears cache entries for specific URLs.
+ * Used when rerunning an audit with forceRefresh.
+ */
+export async function clearCacheForUrls(urls: string[]): Promise<number> {
+  if (urls.length === 0) return 0;
+
+  const urlHashes = urls.map((url) => hashUrl(url));
+
+  const result = await db.urlCache.deleteMany({
+    where: {
+      urlHash: { in: urlHashes },
+    },
+  });
+
+  return result.count;
+}
+
+/**
+ * Clears all failed cache entries.
+ * Useful when switching scraping providers.
+ */
+export async function clearFailedCache(): Promise<number> {
+  const result = await db.urlCache.deleteMany({
+    where: { success: false },
+  });
+
+  return result.count;
+}

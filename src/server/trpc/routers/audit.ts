@@ -1,5 +1,8 @@
 import { TRPCError } from "@trpc/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
+
+import { clearCacheForUrls } from "@/server/services/url-cache";
 
 import {
   createTRPCRouter,
@@ -20,6 +23,8 @@ import {
   findCitationGaps,
   calculateSentimentBreakdown,
   calculateAuditStats,
+  calculateShareOfVoice,
+  calculateCombinedVisibilityScore,
 } from "@/server/services/metrics";
 import { generateInsights } from "@/server/services/insights";
 import { getFirstMentionSnippet } from "@/server/services/text-utils";
@@ -38,6 +43,7 @@ export const auditRouter = createTRPCRouter({
         data: {
           userId: ctx.userId,
           brandName: input.brandName,
+          brandContext: input.brandContext,
           industryIntent: input.industryIntent,
           depth,
           minAuthority: depthConfig.minAuthority,
@@ -141,6 +147,7 @@ export const auditRouter = createTRPCRouter({
         include: {
           competitors: true,
           sources: true,
+          aiPlatformQueries: true,
         },
       });
 
@@ -163,6 +170,18 @@ export const auditRouter = createTRPCRouter({
       const sentimentBreakdown = calculateSentimentBreakdown(audit.sources);
       const stats = calculateAuditStats(audit.sources);
 
+      // Calculate Share of Voice metrics from AI platform queries
+      const shareOfVoice = calculateShareOfVoice(
+        audit.aiPlatformQueries,
+        audit.competitors
+      );
+
+      // Calculate combined visibility score (web + AI)
+      const combinedVisibilityScore = calculateCombinedVisibilityScore(
+        visibilityIndex,
+        shareOfVoice.brandShareOfVoice
+      );
+
       // Get top brand mentions with context snippets
       const brandMentions = audit.sources
         .filter((s) => s.mentionsBrand && s.analyzedAt)
@@ -174,8 +193,8 @@ export const auditRouter = createTRPCRouter({
           title: source.title,
           authorityScore: source.authorityScore,
           sentiment: source.sentiment,
-          // Extract a snippet showing where the brand is mentioned
-          mentionSnippet: getFirstMentionSnippet(source.markdown, audit.brandName),
+          // Prefer stored GPT-extracted snippet, fall back to computed
+          mentionSnippet: source.mentionSnippet ?? getFirstMentionSnippet(source.markdown, audit.brandName),
         }));
 
       return {
@@ -185,6 +204,7 @@ export const auditRouter = createTRPCRouter({
           status: audit.status,
           visibilityScore: audit.visibilityScore,
           createdAt: audit.createdAt,
+          aiTestQueries: audit.aiTestQueries,
         },
         competitors: audit.competitors.map((c) => c.name),
         visibilityIndex,
@@ -192,6 +212,8 @@ export const auditRouter = createTRPCRouter({
         sentimentBreakdown,
         stats,
         brandMentions,
+        shareOfVoice,
+        combinedVisibilityScore,
       };
     }),
 
@@ -220,10 +242,25 @@ export const auditRouter = createTRPCRouter({
         });
       }
 
+      // Get source URLs before deletion for cache clearing
+      const sources = await ctx.db.source.findMany({
+        where: { auditId: input.id },
+        select: { url: true },
+      });
+      const sourceUrls = sources.map((s) => s.url);
+
       // Cascade delete handles competitors, sources, logs
       await ctx.db.audit.delete({
         where: { id: input.id },
       });
+
+      // Clear URL cache for deleted sources
+      if (sourceUrls.length > 0) {
+        await clearCacheForUrls(sourceUrls);
+      }
+
+      // Invalidate the dashboard cache so deleted audit disappears
+      revalidatePath("/dashboard");
 
       return { success: true };
     }),
@@ -450,6 +487,13 @@ export const auditRouter = createTRPCRouter({
         });
       }
 
+      // Get source URLs before deleting (for cache clearing)
+      const sources = await ctx.db.source.findMany({
+        where: { auditId: input.id },
+        select: { url: true },
+      });
+      const sourceUrls = sources.map((s) => s.url);
+
       // Delete existing sources and logs
       await ctx.db.source.deleteMany({
         where: { auditId: input.id },
@@ -458,6 +502,11 @@ export const auditRouter = createTRPCRouter({
       await ctx.db.auditLog.deleteMany({
         where: { auditId: input.id },
       });
+
+      // Clear URL cache for deleted sources so fresh scrapes happen on rerun
+      if (sourceUrls.length > 0) {
+        await clearCacheForUrls(sourceUrls);
+      }
 
       // Handle competitor updates if provided
       if (input.competitors !== undefined) {
@@ -562,7 +611,7 @@ export const auditRouter = createTRPCRouter({
         .sort((a, b) => (b.authorityScore ?? 0) - (a.authorityScore ?? 0))
         .slice(0, 10);
 
-      // Generate insights
+      // Generate insights with context snippets for better analysis
       const insights = await generateInsights({
         brandName: audit.brandName,
         competitors: audit.competitors.map((c) => c.name),
@@ -576,12 +625,14 @@ export const auditRouter = createTRPCRouter({
           url: g.url,
           authorityScore: g.authorityScore,
           mentionsCompetitors: g.mentionsCompetitors,
+          snippet: g.mentionSnippet, // Context for competitor mentions
         })),
         brandMentions: brandMentions.map((m) => ({
           title: m.title,
           url: m.url,
           authorityScore: m.authorityScore,
           sentiment: m.sentiment,
+          snippet: m.mentionSnippet, // Context justifying sentiment
         })),
       });
 

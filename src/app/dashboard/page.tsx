@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Plus, Search, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
+// Prevent static caching - dashboard should always fetch fresh data
+export const dynamic = "force-dynamic";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

@@ -19,7 +19,8 @@ function getFirecrawl(): Firecrawl {
 const SCRAPE_TIMEOUT_MS = 30000; // 30 seconds max per URL
 const BATCH_TIMEOUT_MS = 120000; // 2 minutes max for entire batch
 const BATCH_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for batch status
-const PARALLEL_CONCURRENCY = 5; // Concurrent individual scrapes for fallback
+const PARALLEL_CONCURRENCY = 3; // Reduced concurrency to avoid rate limits
+const RATE_LIMIT_DELAY_MS = 2000; // Delay between retries on rate limit
 
 export interface ScrapeResult {
   url: string;
@@ -104,8 +105,16 @@ export async function scrapeToMarkdown(
 }
 
 /**
+ * Helper to delay execution
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Scrapes multiple URLs in parallel with concurrency limit.
  * Used as a fallback when batch API fails or times out.
+ * Includes delays between chunks to respect rate limits.
  */
 async function scrapeParallel(
   urls: string[],
@@ -120,6 +129,11 @@ async function scrapeParallel(
       chunk.map((url) => scrapeToMarkdown(url, options))
     );
     results.push(...chunkResults);
+
+    // Add delay between chunks to avoid hitting rate limits
+    if (i + PARALLEL_CONCURRENCY < urls.length) {
+      await delay(RATE_LIMIT_DELAY_MS);
+    }
   }
 
   return results;
@@ -246,13 +260,23 @@ export async function scrapeBatchWithApi(
     // Batch failed or timed out - log and fall back
     const errorMessage = error instanceof Error ? error.message : "Batch request failed";
     console.warn(`Batch scrape failed: ${errorMessage}, falling back to parallel scrapes`);
+
+    // If rate limited, parse the wait time and delay before fallback
+    const rateLimitMatch = errorMessage.match(/retry after (\d+)s/i);
+    if (rateLimitMatch) {
+      const waitSeconds = parseInt(rateLimitMatch[1], 10);
+      if (waitSeconds > 0 && waitSeconds <= 120) {
+        console.log(`[Scraper] Rate limited, waiting ${waitSeconds}s before retry...`);
+        await delay(waitSeconds * 1000);
+      }
+    }
   }
 
   // 4. Fall back to parallel individual scrapes if batch didn't succeed
   if (!batchSucceeded) {
     const remainingUrls = urlsToScrape.filter((url) => !results.has(url));
     if (remainingUrls.length > 0) {
-      console.log(`Falling back to parallel scrapes for ${remainingUrls.length} URLs`);
+      console.log(`[Scraper] Processing ${remainingUrls.length} URLs individually...`);
       const fallbackResults = await scrapeParallel(remainingUrls, options);
       for (const result of fallbackResults) {
         results.set(result.url, result);

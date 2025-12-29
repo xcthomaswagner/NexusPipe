@@ -136,12 +136,15 @@ The audit produces the strategy. Your citation gaps ARE your short and mid-term 
 
 **POSITIVE**: Content that portrays your brand favorably — recommendations, praise, success stories, positive comparisons.
 
+**NEGATIVE**: Content that portrays your brand unfavorably — criticism, complaints, warnings against using, unfavorable comparisons.
+
 **NEUTRAL**: Factual mentions without strong positive or negative framing — listings, directories, straightforward descriptions.
 
 **MIXED**: Content containing both positive and negative elements — balanced reviews, comparisons with trade-offs, nuanced analysis.
 
 **Using sentiment data:**
 - High positive sentiment = strong brand perception, leverage in marketing
+- Negative sentiment = identify issues to address, reputation management opportunities
 - High neutral sentiment = opportunity to differentiate with stronger messaging
 - Mixed sentiment = review and address any criticism themes
 - Monitor sentiment trends across multiple audits over time`,
@@ -256,6 +259,20 @@ A: Running without competitors gives you a pure brand visibility audit — measu
 - You want to see all sources mentioning you, not just citation gaps
 
 When you add competitors, you unlock citation gap analysis (sources mentioning them but not you), which is the most actionable output for improving visibility.`,
+    },
+    {
+      id: "glossary",
+      title: "Glossary",
+      content: `Key terms used in Generative Engine Optimization (GEO):
+
+**Authority**
+A score (0-100%) representing the credibility and influence of a web source. Higher authority sources are more likely to be referenced by AI models in their training data and retrieval systems. Authority is determined by factors like domain reputation, backlink quality, and content trustworthiness. In NexusPipe, sources are ranked by authority to prioritize the most impactful opportunities.
+
+**Domain Mismatch (Homonym Detection)**
+When your brand name appears in content but the word is being used with a different meaning. Many brand names are also common words: "Fender" (guitar brand vs. car body panel), "Apple" (tech company vs. fruit), "Amazon" (retailer vs. rainforest). If a source says "replaced the front fender after the accident," that's not a mention of Fender guitars — it's a domain mismatch. NexusPipe uses AI-powered analysis to detect these false positives and exclude them from your Visibility Index.
+
+**Golden Nugget**
+A standalone, highly citable fact or statistic (typically under 18 tokens) that AI models can easily extract and reference in their responses. Golden nuggets are "quotable quotes" — self-contained pieces of information that don't require additional context. Examples include: "Founded in 1946", "Serves 10,000+ enterprise customers", or "Winner of the 2024 Gartner Magic Quadrant." Creating golden nuggets in your content increases the likelihood that AI models will cite your brand when answering relevant questions.`,
     },
   ],
 } as const;

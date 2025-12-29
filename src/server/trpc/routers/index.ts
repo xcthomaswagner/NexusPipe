@@ -3,12 +3,14 @@ import { userRouter } from "@/server/trpc/routers/user";
 import { auditRouter } from "@/server/trpc/routers/audit";
 import { pipelineRouter } from "@/server/trpc/routers/pipeline";
 import { sourceRouter } from "@/server/trpc/routers/source";
+import { aiPlatformsRouter } from "@/server/trpc/routers/ai-platforms";
 
 export const appRouter = createTRPCRouter({
   user: userRouter,
   audit: auditRouter,
   pipeline: pipelineRouter,
   source: sourceRouter,
+  aiPlatforms: aiPlatformsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -5,6 +5,7 @@
 
 import * as jina from "./jina";
 import * as firecrawl from "./firecrawl";
+import { env } from "@/server/env";
 
 import type { ScrapeResult, ScrapeOptions } from "./jina";
 
@@ -13,16 +14,15 @@ export type { ScrapeResult, ScrapeOptions };
 
 type ScrapeProvider = "jina" | "firecrawl";
 
-function getProvider(): ScrapeProvider {
-  const provider = process.env.SCRAPE_PROVIDER?.toLowerCase();
-  if (provider === "firecrawl") {
-    return "firecrawl";
-  }
-  return "jina"; // Default to Jina
-}
+// Cache the provider to avoid repeated env access and logging
+let cachedProvider: ScrapeProvider | null = null;
 
-function getJinaApiKey(): string | undefined {
-  return process.env.JINA_API_KEY;
+function getProvider(): ScrapeProvider {
+  if (cachedProvider === null) {
+    cachedProvider = env.SCRAPE_PROVIDER;
+    console.log("[Scraper] Using provider:", cachedProvider);
+  }
+  return cachedProvider;
 }
 
 /**
@@ -39,7 +39,7 @@ export async function scrapeToMarkdown(
     return firecrawl.scrapeToMarkdown(url, options);
   }
 
-  return jina.scrapeToMarkdown(url, { ...options, apiKey: getJinaApiKey() });
+  return jina.scrapeToMarkdown(url, { ...options, apiKey: env.JINA_API_KEY });
 }
 
 /**
@@ -57,7 +57,7 @@ export async function scrapeBatch(
     return firecrawl.scrapeBatch(urls, options);
   }
 
-  return jina.scrapeBatch(urls, { ...options, apiKey: getJinaApiKey() });
+  return jina.scrapeBatch(urls, { ...options, apiKey: env.JINA_API_KEY });
 }
 
 /**

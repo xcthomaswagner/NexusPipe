@@ -14,6 +14,28 @@ import { DEPTH_CONFIG } from "@/lib/validation/audit";
 const SCRAPE_BATCH_SIZE = 10; // Parallel scrapes per tick
 const ANALYZE_BATCH_SIZE = 10;
 
+// Processing locks to prevent concurrent synthesis for the same audit
+const processingLocks = new Map<string, boolean>();
+
+/**
+ * Acquires a processing lock for an audit.
+ * Returns true if lock acquired, false if already locked.
+ */
+function acquireLock(auditId: string): boolean {
+  if (processingLocks.get(auditId)) {
+    return false;
+  }
+  processingLocks.set(auditId, true);
+  return true;
+}
+
+/**
+ * Releases a processing lock for an audit.
+ */
+function releaseLock(auditId: string): void {
+  processingLocks.delete(auditId);
+}
+
 export interface PipelineResult {
   status: AuditStatus;
   progress: number;
@@ -201,15 +223,21 @@ export async function processNextChunk(
 
 /**
  * Processes the ingestion stage: scrapes pending sources.
+ * Uses a lock to prevent concurrent processing of the same audit.
  */
 async function processIngestion(
   audit: Audit & { competitors: { name: string }[]; sources: Prisma.SourceGetPayload<object>[] },
   options?: ScrapeOptions
 ): Promise<PipelineResult> {
-  const pendingSources = audit.sources.filter(
+  // Fetch fresh source data to check current state
+  const freshSources = await db.source.findMany({
+    where: { auditId: audit.id },
+  });
+
+  const pendingSources = freshSources.filter(
     (s) => s.scrapeStatus === "PENDING"
   );
-  const totalSources = audit.sources.length;
+  const totalSources = freshSources.length;
   const scrapedCount = totalSources - pendingSources.length;
 
   if (pendingSources.length === 0) {
@@ -219,96 +247,117 @@ async function processIngestion(
       data: { status: "SYNTHESIZING" },
     });
 
-    await log(audit.id, "Ingestion complete. Starting sentiment analysis...");
+    await log(audit.id, "Analysis complete. Starting synthesis...");
 
     return {
       status: "SYNTHESIZING",
       progress: 50,
-      message: "Ingestion complete. Starting analysis...",
+      message: "Analysis complete. Starting synthesis...",
     };
   }
 
-  // Scrape next batch
-  const batch = pendingSources.slice(0, SCRAPE_BATCH_SIZE);
-  const urls = batch.map((s) => s.url);
+  // Try to acquire lock - if already processing, return current progress
+  if (!acquireLock(audit.id)) {
+    const progress = 10 + (scrapedCount / totalSources) * 40;
+    return {
+      status: "INGESTING",
+      progress,
+      message: `Analyzing ${scrapedCount}/${totalSources} sources (in progress)...`,
+    };
+  }
 
-  await log(
-    audit.id,
-    `Scraping sources ${scrapedCount + 1}-${Math.min(scrapedCount + batch.length, totalSources)} of ${totalSources}...`
-  );
-
-  let results;
   try {
-    results = await scrapeForTick(urls, options);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown scraping error";
-    await log(audit.id, `Scraping error: ${errorMessage}`);
+    // Scrape next batch
+    const batch = pendingSources.slice(0, SCRAPE_BATCH_SIZE);
+    const urls = batch.map((s) => s.url);
 
-    // Mark all batch sources as failed
-    for (const source of batch) {
+    await log(
+      audit.id,
+      `Analyzing sources ${scrapedCount + 1}-${Math.min(scrapedCount + batch.length, totalSources)} of ${totalSources}...`
+    );
+
+    let results;
+    try {
+      results = await scrapeForTick(urls, options);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await log(audit.id, `Analysis error: ${errorMessage}`);
+
+      // Mark all batch sources as failed
+      for (const source of batch) {
+        await db.source.update({
+          where: { id: source.id },
+          data: {
+            scrapeStatus: "FAILED",
+            scrapeError: errorMessage,
+          },
+        });
+      }
+
+      const newScrapedCount = scrapedCount + batch.length;
+      const progress = 10 + (newScrapedCount / totalSources) * 40;
+      return {
+        status: "INGESTING" as const,
+        progress,
+        message: `Error, continuing... (${newScrapedCount}/${totalSources})`,
+      };
+    }
+
+    // Log cache statistics and errors
+    const cacheHits = results.filter((r) => r.fromCache).length;
+    const freshScrapes = results.length - cacheHits;
+    const failures = results.filter((r) => !r.success).length;
+
+    if (cacheHits > 0) {
+      await log(audit.id, `Cache: ${cacheHits} cached, ${freshScrapes} fresh`);
+    }
+
+    if (failures > 0) {
+      await log(audit.id, `Results: ${results.length - failures} success, ${failures} failed`);
+    }
+
+    // Update sources with results
+    for (let i = 0; i < batch.length; i++) {
+      const source = batch[i];
+      const result = results[i];
+
       await db.source.update({
         where: { id: source.id },
         data: {
-          scrapeStatus: "FAILED",
-          scrapeError: errorMessage,
+          scrapeStatus: result.success ? "COMPLETED" : "FAILED",
+          markdown: result.markdown,
+          scrapeError: result.error,
         },
       });
     }
 
     const newScrapedCount = scrapedCount + batch.length;
-    const progress = 10 + (newScrapedCount / totalSources) * 40;
+    const progress = 10 + (newScrapedCount / totalSources) * 40; // 10-50%
+
     return {
-      status: "INGESTING" as const,
+      status: "INGESTING",
       progress,
-      message: `Scrape error, continuing... (${newScrapedCount}/${totalSources})`,
+      message: `Analyzed ${newScrapedCount}/${totalSources} sources`,
     };
+  } finally {
+    // Always release the lock
+    releaseLock(audit.id);
   }
-
-  // Log cache statistics and errors
-  const cacheHits = results.filter((r) => r.fromCache).length;
-  const freshScrapes = results.length - cacheHits;
-  const failures = results.filter((r) => !r.success).length;
-
-  if (cacheHits > 0) {
-    await log(audit.id, `Cache: ${cacheHits} cached, ${freshScrapes} fresh`);
-  }
-
-  if (failures > 0) {
-    await log(audit.id, `Scrape results: ${results.length - failures} success, ${failures} failed`);
-  }
-
-  // Update sources with results
-  for (let i = 0; i < batch.length; i++) {
-    const source = batch[i];
-    const result = results[i];
-
-    await db.source.update({
-      where: { id: source.id },
-      data: {
-        scrapeStatus: result.success ? "COMPLETED" : "FAILED",
-        markdown: result.markdown,
-        scrapeError: result.error,
-      },
-    });
-  }
-
-  const newScrapedCount = scrapedCount + batch.length;
-  const progress = 10 + (newScrapedCount / totalSources) * 40; // 10-50%
-
-  return {
-    status: "INGESTING",
-    progress,
-    message: `Scraped ${newScrapedCount}/${totalSources} sources`,
-  };
 }
 
 /**
  * Processes the synthesis stage: analyzes scraped sources.
+ * Uses a lock to prevent concurrent processing of the same audit.
  */
 async function processSynthesis(
   audit: Audit & { competitors: { name: string }[]; sources: Prisma.SourceGetPayload<object>[] }
 ): Promise<PipelineResult> {
-  const scrapedSources = audit.sources.filter(
+  // Fetch fresh source data to check current state
+  const freshSources = await db.source.findMany({
+    where: { auditId: audit.id },
+  });
+
+  const scrapedSources = freshSources.filter(
     (s) => s.scrapeStatus === "COMPLETED" && s.markdown
   );
   const unanalyzedSources = scrapedSources.filter((s) => s.analyzedAt === null);
@@ -316,10 +365,6 @@ async function processSynthesis(
 
   if (unanalyzedSources.length === 0) {
     // All sources analyzed, complete the audit
-    // Fetch fresh source data to get updated mentionsBrand values
-    const freshSources = await db.source.findMany({
-      where: { auditId: audit.id },
-    });
     const visibilityScore = calculateVisibilityIndex(freshSources);
 
     await db.audit.update({
@@ -342,55 +387,76 @@ async function processSynthesis(
     };
   }
 
-  // Analyze next batch
-  const batch = unanalyzedSources.slice(0, ANALYZE_BATCH_SIZE);
-  const competitorNames = audit.competitors.map((c) => c.name);
-
-  await log(
-    audit.id,
-    `Analyzing sources ${analyzedCount + 1}-${Math.min(analyzedCount + batch.length, scrapedSources.length)} of ${scrapedSources.length}...`
-  );
-
-  // Analyze each source
-  for (const source of batch) {
-    try {
-      const result = await analyzeSource(
-        source.markdown!,
-        audit.brandName,
-        competitorNames
-      );
-
-      await db.source.update({
-        where: { id: source.id },
-        data: {
-          mentionsBrand: result.mentionsBrand,
-          mentionsCompetitors: result.mentionsCompetitors,
-          sentiment: result.sentiment,
-          analyzedAt: new Date(),
-        },
-      });
-    } catch {
-      // Mark as analyzed with defaults on error
-      await db.source.update({
-        where: { id: source.id },
-        data: {
-          mentionsBrand: false,
-          mentionsCompetitors: [],
-          sentiment: "NEUTRAL",
-          analyzedAt: new Date(),
-        },
-      });
-    }
+  // Try to acquire lock - if already processing, return current progress
+  if (!acquireLock(audit.id)) {
+    const progress = 50 + (analyzedCount / scrapedSources.length) * 50;
+    return {
+      status: "SYNTHESIZING",
+      progress,
+      message: `Synthesizing ${analyzedCount}/${scrapedSources.length} sources (in progress)...`,
+    };
   }
 
-  const newAnalyzedCount = analyzedCount + batch.length;
-  const progress = 50 + (newAnalyzedCount / scrapedSources.length) * 50; // 50-100%
+  try {
+    // Analyze next batch
+    const batch = unanalyzedSources.slice(0, ANALYZE_BATCH_SIZE);
+    const competitorNames = audit.competitors.map((c) => c.name);
 
-  return {
-    status: "SYNTHESIZING",
-    progress,
-    message: `Analyzed ${newAnalyzedCount}/${scrapedSources.length} sources`,
-  };
+    await log(
+      audit.id,
+      `Synthesizing sources ${analyzedCount + 1}-${Math.min(analyzedCount + batch.length, scrapedSources.length)} of ${scrapedSources.length}...`
+    );
+
+    // Analyze each source
+    for (const source of batch) {
+      try {
+        const result = await analyzeSource(
+          source.markdown!,
+          audit.brandName,
+          competitorNames,
+          audit.brandContext // Pass brand context for entity disambiguation
+        );
+
+        await db.source.update({
+          where: { id: source.id },
+          data: {
+            mentionsBrand: result.mentionsBrand,
+            mentionsCompetitors: result.mentionsCompetitors,
+            sentiment: result.sentiment,
+            mentionSnippet: result.mentionSnippet,
+            isAmbiguousMatch: result.isAmbiguousMatch,
+            analyzedAt: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error(`[Synthesis] Error analyzing source ${source.id}:`, error);
+        // Mark as analyzed with defaults on error
+        await db.source.update({
+          where: { id: source.id },
+          data: {
+            mentionsBrand: false,
+            mentionsCompetitors: [],
+            sentiment: "NEUTRAL",
+            mentionSnippet: null,
+            isAmbiguousMatch: false,
+            analyzedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    const newAnalyzedCount = analyzedCount + batch.length;
+    const progress = 50 + (newAnalyzedCount / scrapedSources.length) * 50; // 50-100%
+
+    return {
+      status: "SYNTHESIZING",
+      progress,
+      message: `Synthesized ${newAnalyzedCount}/${scrapedSources.length} sources`,
+    };
+  } finally {
+    // Always release the lock
+    releaseLock(audit.id);
+  }
 }
 
 /**
@@ -433,7 +499,7 @@ export async function getProgress(auditId: string): Promise<PipelineResult> {
       return {
         status: "INGESTING",
         progress,
-        message: `Scraped ${scrapedSources}/${totalSources} sources`,
+        message: `Analyzed ${scrapedSources}/${totalSources} sources`,
       };
     }
 
@@ -448,7 +514,7 @@ export async function getProgress(auditId: string): Promise<PipelineResult> {
       return {
         status: "SYNTHESIZING",
         progress,
-        message: `Analyzed ${analyzedSources}/${scrapedCount} sources`,
+        message: `Synthesized ${analyzedSources}/${scrapedCount} sources`,
       };
     }
 

@@ -12,7 +12,7 @@ export const auditStatusSchema = z.enum([
 
 export const scrapeStatusSchema = z.enum(["PENDING", "COMPLETED", "FAILED"]);
 
-export const sentimentSchema = z.enum(["POSITIVE", "NEUTRAL", "MIXED"]);
+export const sentimentSchema = z.enum(["POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"]);
 
 export const auditDepthSchema = z.enum(["QUICK", "STANDARD", "DEEP"]);
 
@@ -31,6 +31,10 @@ export const DEPTH_CONFIG = {
 // Create audit input (form fields)
 export const createAuditSchema = z.object({
   brandName: z.string().min(1, "Brand name is required").max(100),
+  brandContext: z
+    .string()
+    .max(100)
+    .optional(), // e.g., "Guitar manufacturer", "Software company" - helps disambiguate homonyms
   competitors: z
     .array(z.string().min(1).max(100))
     .max(10, "Maximum 10 competitors allowed")

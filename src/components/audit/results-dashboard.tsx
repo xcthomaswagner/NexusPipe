@@ -99,18 +99,42 @@ export function ResultsDashboard({ auditId, onRerun }: ResultsDashboardProps) {
     );
   }
 
-  const { visibilityIndex, sentimentBreakdown, citationGaps, stats } = data;
+  const { visibilityIndex, citationGaps, stats, shareOfVoice, combinedVisibilityScore } = data;
 
   return (
     <TooltipProvider>
       <div className="space-y-6">
         {/* Key Metrics */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {/* Visibility Index */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+          {/* Combined Visibility Score */}
+          <Card className="border-primary/50 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Combined Visibility
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold text-primary">
+                  {combinedVisibilityScore.toFixed(1)}%
+                </span>
+                {combinedVisibilityScore >= 50 ? (
+                  <TrendingUp className="h-5 w-5 text-green-500" />
+                ) : (
+                  <TrendingDown className="h-5 w-5 text-red-500" />
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                blended Web + AI
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Web Visibility Index */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Visibility Index
+                Web Visibility
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -125,7 +149,31 @@ export function ResultsDashboard({ auditId, onRerun }: ResultsDashboardProps) {
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                of sources mention your brand
+                of web sources mention brand
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* AI Share of Voice */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                AI Share of Voice
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold">
+                  {shareOfVoice.brandShareOfVoice.toFixed(1)}%
+                </span>
+                {shareOfVoice.brandShareOfVoice >= 50 ? (
+                  <TrendingUp className="h-5 w-5 text-green-500" />
+                ) : (
+                  <TrendingDown className="h-5 w-5 text-red-500" />
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {shareOfVoice.brandMentions} / {shareOfVoice.totalResponses} AI responses
               </p>
             </CardContent>
           </Card>
@@ -162,37 +210,6 @@ export function ResultsDashboard({ auditId, onRerun }: ResultsDashboardProps) {
               <p className="text-sm text-muted-foreground mt-1">
                 opportunities identified
               </p>
-            </CardContent>
-          </Card>
-
-          {/* Sentiment */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Sentiment Breakdown
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4">
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-green-600">
-                    {sentimentBreakdown.POSITIVE}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Positive</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-zinc-600">
-                    {sentimentBreakdown.NEUTRAL}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Neutral</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-amber-600">
-                    {sentimentBreakdown.MIXED}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Mixed</div>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -338,14 +355,18 @@ export function ResultsDashboard({ auditId, onRerun }: ResultsDashboardProps) {
                             variant={
                               source.sentiment === "POSITIVE"
                                 ? "default"
-                                : source.sentiment === "MIXED"
-                                  ? "secondary"
-                                  : "outline"
+                                : source.sentiment === "NEGATIVE"
+                                  ? "destructive"
+                                  : source.sentiment === "MIXED"
+                                    ? "secondary"
+                                    : "outline"
                             }
                             className={
                               source.sentiment === "POSITIVE"
                                 ? "bg-green-100 text-green-800"
-                                : ""
+                                : source.sentiment === "NEGATIVE"
+                                  ? "bg-red-100 text-red-800"
+                                  : ""
                             }
                           >
                             {source.sentiment}

@@ -16,22 +16,25 @@ model User {
 }
 
 model Audit {
-  id               String       @id @default(cuid())
-  userId           String
-  user             User         @relation(fields: [userId], references: [id])
-  brandName        String
-  industryIntent   String
-  status           AuditStatus  @default(PENDING)
-  depth            AuditDepth   @default(STANDARD)
-  minAuthority     Float        @default(0.15)
-  visibilityScore  Float?
-  errorMessage     String?
-  excludedDomains  String[]     @default([])
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  competitors      Competitor[]
-  sources          Source[]
-  logs             AuditLog[]
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id])
+  brandName         String
+  brandContext      String?            // e.g., "Guitar manufacturer", "Software company" - helps disambiguate homonyms
+  industryIntent    String
+  status            AuditStatus        @default(PENDING)
+  depth             AuditDepth         @default(STANDARD)
+  minAuthority      Float              @default(0.15)
+  visibilityScore   Float?
+  errorMessage      String?
+  excludedDomains   String[]           @default([])
+  aiTestQueries     String[]           @default([])
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  competitors       Competitor[]
+  sources           Source[]
+  logs              AuditLog[]
+  aiPlatformQueries AIPlatformQuery[]
 
   @@index([userId])
 }
@@ -56,6 +59,8 @@ model Source {
   mentionsBrand       Boolean      @default(false)
   mentionsCompetitors String[]
   sentiment           Sentiment?
+  mentionSnippet      String?      // GPT-extracted quote justifying the sentiment
+  isAmbiguousMatch    Boolean?     // True if brand name appears but refers to something else (homonym)
   scrapeStatus        ScrapeStatus @default(PENDING)
   scrapeError         String?
   analyzedAt          DateTime?
@@ -98,6 +103,7 @@ enum ScrapeStatus {
 
 enum Sentiment {
   POSITIVE
+  NEGATIVE
   NEUTRAL
   MIXED
 }
@@ -115,4 +121,34 @@ model UrlCache {
 
   @@index([urlHash])
   @@index([scrapedAt])
+}
+
+model AIPlatformQuery {
+  id                   String    @id @default(cuid())
+  auditId              String
+  audit                Audit     @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  query                String
+  platform             String    // 'chatgpt', 'perplexity', 'claude', 'gemini'
+  response             String    @db.Text
+  mentionsBrand        Boolean
+  brandPosition        Int?
+  sentiment            Sentiment?
+  competitorsMentioned String[]
+  createdAt            DateTime  @default(now())
+
+  @@index([auditId])
+  @@index([auditId, platform])
+}
+
+model AIPlatformCache {
+  id        String   @id @default(cuid())
+  query     String
+  queryHash String
+  platform  String
+  response  String   @db.Text
+  queriedAt DateTime @default(now())
+  hitCount  Int      @default(0)
+
+  @@unique([queryHash, platform])
+  @@index([queriedAt])
 }

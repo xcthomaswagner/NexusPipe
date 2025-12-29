@@ -38,6 +38,7 @@ const mockAuditData: AuditData = {
   analyzedSources: 42,
   sentimentBreakdown: {
     POSITIVE: 10,
+    NEGATIVE: 3,
     NEUTRAL: 25,
     MIXED: 7,
   },
@@ -47,6 +48,7 @@ const mockAuditData: AuditData = {
       url: "https://example.com/article",
       authorityScore: 0.85,
       mentionsCompetitors: ["Competitor A"],
+      snippet: "Competitor A leads the market with robust features",
     },
   ],
   brandMentions: [
@@ -55,6 +57,7 @@ const mockAuditData: AuditData = {
       url: "https://review.com/acme",
       authorityScore: 0.75,
       sentiment: "POSITIVE",
+      snippet: "Acme Corp offers excellent customer service",
     },
   ],
 };
@@ -108,7 +111,7 @@ describe("insights service", () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: "gpt-5.1-chat-latest",
+          model: "gpt-4o",
           response_format: { type: "json_object" },
         })
       );

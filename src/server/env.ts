@@ -13,6 +13,11 @@ const envSchema = z.object({
   JINA_API_KEY: z.string().optional(), // Optional - free tier works without it
   FIRECRAWL_API_KEY: z.string().optional(), // Required if SCRAPE_PROVIDER=firecrawl
 
+  // AI Platform APIs (optional - enable specific platforms)
+  ANTHROPIC_API_KEY: z.string().optional(), // For Claude
+  PERPLEXITY_API_KEY: z.string().optional(), // For Perplexity
+  GOOGLE_AI_API_KEY: z.string().optional(), // For Gemini
+
   // Clerk (optional - handled by Clerk SDK)
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_SECRET_KEY: z.string().optional(),

@@ -166,24 +166,23 @@ test.describe("Audit Form - Authenticated", () => {
     await expect(page.getByText("Brand name is required")).toBeVisible({ timeout: 5000 });
   });
 
-  test("validates required competitors", async ({ page }) => {
+  test("competitors are optional - form can submit without them", async ({ page }) => {
     // Wait for form to be hydrated
     await expect(page.getByRole("button", { name: "Start Audit" })).toBeVisible({ timeout: 5000 });
 
     // Fill brand and intent but don't add any competitors
-    await page.getByPlaceholder("Your brand name").fill("Test Brand");
-    await page.getByPlaceholder(/B2B commerce/).fill("Test industry query for validation purposes");
+    const uniqueBrand = `NoCompetitors-${Date.now()}`;
+    await page.getByPlaceholder("Your brand name").fill(uniqueBrand);
+    await page.getByPlaceholder(/B2B commerce/).fill("Test industry query for validation purposes without competitors");
 
-    // Try to submit without adding any competitors
+    // Select Quick depth for faster test
+    await page.getByText("Quick", { exact: true }).click();
+
+    // Submit without adding any competitors - should work since they're optional
     await page.getByRole("button", { name: "Start Audit" }).click();
 
-    // Should show validation error or stay on the form (not redirect)
-    // Wait a moment to see if form submits or shows error
-    await page.waitForTimeout(1000);
-
-    // Should still be on the form page (submission blocked)
-    await expect(page.getByText("New GEO Audit")).toBeVisible();
-    await expect(page.getByPlaceholder("Your brand name")).toHaveValue("Test Brand");
+    // Should redirect to audit page (not stay on form)
+    await expect(page).toHaveURL(/\/audit\/[a-z0-9]+/, { timeout: 60000 });
   });
 
   test("validates industry intent minimum length", async ({ page }) => {

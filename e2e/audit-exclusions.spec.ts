@@ -91,9 +91,10 @@ test.describe("Audit Exclusion List - Authenticated", () => {
     await page.getByRole("button", { name: /Add/ }).click();
     await expect(page.getByText(testDomain)).toBeVisible({ timeout: 10000 });
 
-    // Find and click remove button on the domain
-    const badge = page.locator(`text=${testDomain}`).locator("..");
-    await badge.locator("button").click();
+    // Find the badge span that contains the domain text and its X button
+    // Structure: span > (domain text + button)
+    const badge = page.locator("span").filter({ hasText: testDomain });
+    await badge.getByRole("button").click();
 
     // Verify removal toast
     await expect(page.getByText(/Domain removed/i)).toBeVisible({ timeout: 10000 });
@@ -103,13 +104,17 @@ test.describe("Audit Exclusion List - Authenticated", () => {
     await page.goto("/dashboard");
     await page.getByText("New England Biolabs").click();
 
-    // Should be on Results tab by default
-    await expect(page.getByText("Citation Gaps")).toBeVisible({ timeout: 15000 });
+    // Should be on Results tab by default - wait for the full heading to appear
+    await expect(page.locator("text=Citation Gaps").first()).toBeVisible({ timeout: 15000 });
 
-    // Check for exclude buttons in the table
-    const table = page.locator("table").first();
-    const excludeButtons = table.locator("tbody tr button").first();
-    await expect(excludeButtons).toBeVisible();
+    // Check for exclude buttons in the Citation Gaps table (first table on page)
+    // Table rows have buttons in the Actions column
+    const firstTable = page.locator("table").first();
+    await expect(firstTable).toBeVisible({ timeout: 5000 });
+
+    // Find button in the table rows - use role-based selector
+    const excludeButton = firstTable.getByRole("row").nth(1).getByRole("button").first();
+    await expect(excludeButton).toBeVisible({ timeout: 5000 });
   });
 
   test("Results tab has Brand Mentions section", async ({ page }) => {
@@ -123,36 +128,51 @@ test.describe("Audit Exclusion List - Authenticated", () => {
     await page.goto("/dashboard");
     await page.getByText("New England Biolabs").click();
 
-    await expect(page.getByRole("button", { name: /Rerun/ })).toBeVisible({ timeout: 15000 });
+    // Wait for page to load and check Rerun button exists
+    await expect(page.locator("h1")).toContainText("New England Biolabs", { timeout: 15000 });
+    // Use exact match since there's also "Rerun Audit with Exclusions" button
+    await expect(page.getByRole("button", { name: "Rerun", exact: true })).toBeVisible({ timeout: 5000 });
   });
 
   test("Rerun dialog shows exclusion count", async ({ page }) => {
     await page.goto("/dashboard");
     await page.getByText("New England Biolabs").click();
 
-    // Click Rerun button
-    await page.getByRole("button", { name: /Rerun/ }).first().click();
+    // Wait for audit page to load
+    await expect(page.locator("h1")).toContainText("New England Biolabs", { timeout: 15000 });
 
-    // Check dialog appears
+    // Click Rerun button (use exact match as there's also "Rerun Audit with Exclusions")
+    await page.getByRole("button", { name: "Rerun", exact: true }).click();
+
+    // Check dialog appears with Edit & Rerun title
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/domains excluded/i)).toBeVisible();
+
+    // The dialog shows "X domains will be excluded from this audit"
+    await expect(page.getByText(/domains will be excluded/i)).toBeVisible({ timeout: 5000 });
   });
 
   test("can click exclude on Citation Gap row", async ({ page }) => {
     await page.goto("/dashboard");
     await page.getByText("New England Biolabs").click();
 
-    // Wait for Citation Gaps to load
-    await expect(page.getByText("Citation Gaps")).toBeVisible({ timeout: 15000 });
+    // Wait for page to fully load
+    await expect(page.locator("h1")).toContainText("New England Biolabs", { timeout: 15000 });
 
-    // Find the first exclude button in table
-    const table = page.locator("table").first();
-    const firstRowBtn = table.locator("tbody tr").first().locator("button").first();
+    // Wait for Citation Gaps section to load
+    await expect(page.locator("text=Citation Gaps").first()).toBeVisible({ timeout: 10000 });
 
-    if (await firstRowBtn.isVisible()) {
-      await firstRowBtn.click();
-      // Should see domain excluded toast
-      await expect(page.getByText(/Domain excluded/i)).toBeVisible({ timeout: 10000 });
+    // Find the first exclude button in Citation Gaps table
+    const citationGapsTable = page.locator("table").first();
+    await expect(citationGapsTable).toBeVisible({ timeout: 5000 });
+
+    // Get first data row (skip header row) and click the exclude button
+    const firstDataRow = citationGapsTable.getByRole("row").nth(1);
+    const excludeButton = firstDataRow.getByRole("button").first();
+
+    if (await excludeButton.isVisible()) {
+      await excludeButton.click();
+      // Should see domain added/excluded toast
+      await expect(page.getByText(/Domain added|Domain excluded/i)).toBeVisible({ timeout: 10000 });
     }
   });
 });
