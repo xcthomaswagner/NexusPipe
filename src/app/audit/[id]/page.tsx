@@ -2,7 +2,7 @@
 
 import { useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, Trash2, RefreshCw, X, Plus, Settings, Sparkles } from "lucide-react";
+import { ArrowLeft, Trash2, RefreshCw, X, Plus, Settings, Sparkles, Download, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -37,6 +37,7 @@ import { AIQueryPanel } from "@/components/audit/ai-query-panel";
 import { AIVisibilityInsights } from "@/components/audit/ai-visibility-insights";
 import { PlatformStrategyCard } from "@/components/audit/platform-strategy-card";
 import { trpc } from "@/lib/trpc/client";
+import { generateSimplePDF } from "@/lib/pdf/client-pdf";
 import type { AuditDepth } from "@/lib/validation/audit";
 
 export default function AuditDetailPage({
@@ -51,6 +52,7 @@ export default function AuditDetailPage({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [rerunDialogOpen, setRerunDialogOpen] = useState(false);
   const [newDomain, setNewDomain] = useState("");
+  const [isGeneratingClientPDF, setIsGeneratingClientPDF] = useState(false);
 
   const { data: audit, isLoading } = trpc.audit.getById.useQuery({ id });
 
@@ -112,6 +114,97 @@ export default function AuditDetailPage({
       toast.error("Error", {
         description: error.message,
       });
+    },
+  });
+
+  // Fetch results for client-side PDF fallback
+  const { data: resultsData } = trpc.audit.getResults.useQuery(
+    { id },
+    { enabled: !!audit && audit.status === "COMPLETED" }
+  );
+
+  const generateReport = trpc.audit.generateReport.useMutation({
+    onSuccess: (result) => {
+      // Download PDF by creating a temporary link
+      const link = document.createElement("a");
+      link.href = `data:${result.contentType};base64,${result.data}`;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Report downloaded", {
+        description: "Your PDF report has been saved.",
+      });
+    },
+    onError: async (error) => {
+      // Fallback to client-side PDF generation
+      console.warn("Server PDF failed, falling back to client-side:", error.message);
+
+      if (!audit || !resultsData) {
+        toast.error("Failed to generate report", {
+          description: "Could not load audit data for PDF generation.",
+        });
+        return;
+      }
+
+      try {
+        setIsGeneratingClientPDF(true);
+        toast.info("Generating PDF locally...", {
+          description: "Server generation failed, using browser fallback.",
+        });
+
+        // Calculate sentiment percentages
+        const sentimentTotal =
+          resultsData.sentimentBreakdown.POSITIVE +
+          resultsData.sentimentBreakdown.NEGATIVE +
+          resultsData.sentimentBreakdown.NEUTRAL +
+          resultsData.sentimentBreakdown.MIXED;
+
+        const sentimentBreakdown = sentimentTotal > 0
+          ? {
+              positive: Math.round((resultsData.sentimentBreakdown.POSITIVE / sentimentTotal) * 100),
+              negative: Math.round((resultsData.sentimentBreakdown.NEGATIVE / sentimentTotal) * 100),
+              neutral: Math.round((resultsData.sentimentBreakdown.NEUTRAL / sentimentTotal) * 100),
+              mixed: Math.round((resultsData.sentimentBreakdown.MIXED / sentimentTotal) * 100),
+            }
+          : { positive: 0, negative: 0, neutral: 0, mixed: 0 };
+
+        const sanitizedBrandName = audit.brandName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "");
+
+        await generateSimplePDF(
+          {
+            brandName: audit.brandName,
+            auditDate: new Date(audit.createdAt).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            }),
+            industryIntentQuery: audit.industryIntent,
+            combinedVisibility: Math.round(resultsData.combinedVisibilityScore),
+            webVisibility: Math.round(resultsData.visibilityIndex),
+            aiShareOfVoice: Math.round(resultsData.shareOfVoice.brandShareOfVoice),
+            sourcesAnalyzed: resultsData.stats.analyzedSources,
+            citationGapsCount: resultsData.citationGaps.length,
+            sentimentBreakdown,
+          },
+          `nexuspipe-report-${sanitizedBrandName}-${Date.now()}.pdf`
+        );
+
+        toast.success("Report downloaded", {
+          description: "PDF generated in your browser.",
+        });
+      } catch (clientError) {
+        console.error("Client PDF generation failed:", clientError);
+        toast.error("Failed to generate report", {
+          description: "Both server and browser PDF generation failed.",
+        });
+      } finally {
+        setIsGeneratingClientPDF(false);
+      }
     },
   });
 
@@ -255,19 +348,39 @@ export default function AuditDetailPage({
         />
       ) : isComplete || showResults ? (
         <Tabs defaultValue="results">
-          <TabsList className="mb-6">
-            <TabsTrigger value="results">Results</TabsTrigger>
-            <TabsTrigger value="ai-visibility">AI Visibility</TabsTrigger>
-            <TabsTrigger value="sources">All Sources</TabsTrigger>
-            <TabsTrigger value="insights">
-              <Sparkles className="mr-1 h-4 w-4" />
-              Insights
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="mr-1 h-4 w-4" />
-              Settings
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between mb-6">
+            <TabsList>
+              <TabsTrigger value="results">Results</TabsTrigger>
+              <TabsTrigger value="ai-visibility">AI Visibility</TabsTrigger>
+              <TabsTrigger value="sources">All Sources</TabsTrigger>
+              <TabsTrigger value="insights">
+                <Sparkles className="mr-1 h-4 w-4" />
+                Insights
+              </TabsTrigger>
+              <TabsTrigger value="settings">
+                <Settings className="mr-1 h-4 w-4" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateReport.mutate({ id })}
+              disabled={generateReport.isPending || isGeneratingClientPDF}
+            >
+              {generateReport.isPending || isGeneratingClientPDF ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export PDF
+                </>
+              )}
+            </Button>
+          </div>
 
           <TabsContent value="results">
             <ResultsDashboard auditId={id} onRerun={handleRerun} />
@@ -440,7 +553,6 @@ function AIVisibilityContent({
       {/* AI Test Query Panel */}
       <AIQueryPanel
         auditId={auditId}
-        brandName={brandName}
         initialQueries={auditData?.aiTestQueries ?? []}
       />
 

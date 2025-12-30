@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusPipe GEO Audit Report - {{brandName}}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      color: #2c3e50;
+      line-height: 1.6;
+      background: #ffffff;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #0070f3 0%, #0052cc 100%);
+      color: white;
+      padding: 30px 40px;
+      margin-bottom: 25px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .header .subtitle {
+      font-size: 11px;
+      opacity: 0.9;
+    }
+
+    .header .brand-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+
+    /* Container */
+    .container {
+      padding: 0 40px 40px;
+      max-width: 100%;
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 30px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1E40AF;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 25px;
+    }
+
+    .metric-card {
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      padding: 12px 10px;
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .metric-card.highlight {
+      background: linear-gradient(135deg, #f0f7ff 0%, #e8f3ff 100%);
+      border-color: #0070f3;
+      border-width: 2px;
+    }
+
+    .metric-label {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: #6c757d;
+      margin-bottom: 6px;
+    }
+
+    .metric-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .metric-card.highlight .metric-value {
+      color: #0070f3;
+    }
+
+    /* Score badges */
+    .score-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .score-badge.large {
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+
+    .score-excellent {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .score-good {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .score-fair {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .score-poor {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    /* Score legend grid */
+    .score-legend {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    /* Progress bars */
+    .progress-container {
+      margin-bottom: 12px;
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+
+    .progress-label .name {
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .progress-label .value {
+      font-weight: 600;
+      color: #6c757d;
+    }
+
+    .progress-bar {
+      height: 16px;
+      background: #f1f3f5;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 12px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-fill.positive {
+      background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    }
+
+    .progress-fill.negative {
+      background: linear-gradient(90deg, #dc3545 0%, #e83e8c 100%);
+    }
+
+    .progress-fill.neutral {
+      background: linear-gradient(90deg, #6c757d 0%, #adb5bd 100%);
+    }
+
+    .progress-fill.mixed {
+      background: linear-gradient(90deg, #ffc107 0%, #fd7e14 100%);
+    }
+
+    .progress-fill.primary {
+      background: linear-gradient(90deg, #0070f3 0%, #0052cc 100%);
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    th {
+      background: #f8f9fa;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 9px;
+      letter-spacing: 0.3px;
+      color: #6c757d;
+    }
+
+    td {
+      font-size: 10px;
+      color: #2c3e50;
+    }
+
+    .url-cell {
+      max-width: 250px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #0070f3;
+      font-size: 10px;
+    }
+
+    .url-subtitle {
+      font-size: 8px;
+      color: #6c757d;
+      margin-top: 2px;
+      max-width: 250px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .authority-cell {
+      font-weight: 600;
+      font-size: 10px;
+    }
+
+    .sentiment-cell {
+      text-transform: uppercase;
+    }
+
+    .competitors-cell {
+      font-size: 9px;
+      color: #6c757d;
+    }
+
+    /* Two column layout */
+    .two-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 25px;
+    }
+
+    /* Competitor comparison */
+    .competitor-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .competitor-row:last-child {
+      border-bottom: none;
+    }
+
+    .competitor-name {
+      width: 120px;
+      font-weight: 500;
+      font-size: 10px;
+    }
+
+    .competitor-bar-container {
+      flex: 1;
+      margin: 0 10px;
+    }
+
+    .competitor-bar {
+      height: 14px;
+      background: #f1f3f5;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    .competitor-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0070f3 0%, #0052cc 100%);
+      border-radius: 7px;
+    }
+
+    .competitor-bar-fill.brand {
+      background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    }
+
+    .competitor-value {
+      width: 45px;
+      text-align: right;
+      font-weight: 600;
+      font-size: 10px;
+    }
+
+    /* Platform cards */
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .platform-card {
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .platform-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 6px;
+    }
+
+    .platform-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0070f3;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 30px;
+      padding: 15px 40px;
+      background: #f8f9fa;
+      border-top: 1px solid #e9ecef;
+      text-align: center;
+    }
+
+    .footer-text {
+      font-size: 9px;
+      color: #6c757d;
+    }
+
+    .footer-logo {
+      font-weight: 600;
+      color: #0070f3;
+    }
+
+    /* Page break */
+    .page-break {
+      page-break-before: always;
+      margin-top: 0;
+      padding-top: 25px;
+    }
+
+    /* Print styles */
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .page-break {
+        page-break-before: always;
+      }
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #6c757d;
+      font-style: italic;
+    }
+
+    /* Query display */
+    .query-section {
+      margin-top: 20px;
+      padding: 12px 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border-left: 3px solid #0070f3;
+    }
+
+    .query-label {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: #6c757d;
+      margin-bottom: 4px;
+    }
+
+    .query-description {
+      font-size: 9px;
+      color: #6c757d;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+
+    .query-text {
+      font-size: 10px;
+      color: #2c3e50;
+      font-style: italic;
+      line-height: 1.4;
+    }
+
+    .query-list {
+      margin-top: 8px;
+    }
+
+    .query-list-item {
+      font-size: 9px;
+      color: #2c3e50;
+      padding: 4px 0;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .query-list-item:last-child {
+      border-bottom: none;
+    }
+
+    /* Interpretation Section */
+    .interpretation-section {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 25px;
+      margin-top: 10px;
+    }
+
+    .interpretation-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1E40AF;
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .interpretation-subsection {
+      margin-bottom: 20px;
+    }
+
+    .interpretation-subsection:last-child {
+      margin-bottom: 0;
+    }
+
+    .interpretation-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 8px;
+    }
+
+    .interpretation-text {
+      font-size: 10px;
+      color: #495057;
+      line-height: 1.6;
+    }
+
+    .metric-definition {
+      display: flex;
+      margin-bottom: 8px;
+    }
+
+    .metric-definition-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: #0070f3;
+      min-width: 140px;
+    }
+
+    .metric-definition-desc {
+      font-size: 10px;
+      color: #495057;
+      line-height: 1.5;
+    }
+
+    .next-steps-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .next-steps-list li {
+      font-size: 10px;
+      color: #495057;
+      padding: 4px 0;
+      padding-left: 18px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .next-steps-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 9px;
+      width: 8px;
+      height: 8px;
+      background: #0070f3;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>NexusPipe GEO Audit Report</h1>
+    <div class="subtitle">External AI Source Analysis</div>
+    <div class="brand-name">{{brandName}} &bull; {{auditDate}}</div>
+  </div>
+
+  <div class="container">
+    <!-- Executive Summary -->
+    <div class="section">
+      <h2 class="section-title">Executive Summary</h2>
+      <div class="metrics-grid">
+        <div class="metric-card highlight">
+          <div class="metric-label">Combined Visibility</div>
+          <div class="metric-value">{{combinedVisibility}}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Web Visibility</div>
+          <div class="metric-value">{{webVisibility}}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">AI Share of Voice</div>
+          <div class="metric-value">{{aiShareOfVoice}}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Sources Analyzed</div>
+          <div class="metric-value">{{sourcesAnalyzed}}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Citation Gaps</div>
+          <div class="metric-value">{{citationGapsCount}}</div>
+        </div>
+      </div>
+
+      <!-- Queries Analyzed -->
+      <div class="query-section">
+        <div class="query-label">Industry Intent Query</div>
+        <div class="query-description">The search query used to discover high-authority web sources in your industry that AI models reference.</div>
+        <div class="query-text">"{{industryIntentQuery}}"</div>
+        {{#if aiTestQueries.length}}
+        <div class="query-list">
+          <div class="query-label" style="margin-top: 10px;">AI Platform Test Queries</div>
+          <div class="query-description">Questions asked to AI platforms (ChatGPT, Perplexity, etc.) to measure how often your brand is mentioned in responses.</div>
+          {{#each aiTestQueries}}
+          <div class="query-list-item">"{{this}}"</div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Web Visibility Analysis -->
+    <div class="section">
+      <h2 class="section-title">Web Visibility Analysis</h2>
+
+      <div class="two-columns">
+        <div>
+          <h3 style="font-size: 11px; font-weight: 600; margin-bottom: 12px; color: #2c3e50;">Sentiment Breakdown</h3>
+          {{#if sentimentBreakdown}}
+          <div class="progress-container">
+            <div class="progress-label">
+              <span class="name">Positive</span>
+              <span class="value">{{sentimentBreakdown.positive}}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill positive" style="width: {{sentimentBreakdown.positive}}%"></div>
+            </div>
+          </div>
+          <div class="progress-container">
+            <div class="progress-label">
+              <span class="name">Negative</span>
+              <span class="value">{{sentimentBreakdown.negative}}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill negative" style="width: {{sentimentBreakdown.negative}}%"></div>
+            </div>
+          </div>
+          <div class="progress-container">
+            <div class="progress-label">
+              <span class="name">Neutral</span>
+              <span class="value">{{sentimentBreakdown.neutral}}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill neutral" style="width: {{sentimentBreakdown.neutral}}%"></div>
+            </div>
+          </div>
+          <div class="progress-container">
+            <div class="progress-label">
+              <span class="name">Mixed</span>
+              <span class="value">{{sentimentBreakdown.mixed}}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill mixed" style="width: {{sentimentBreakdown.mixed}}%"></div>
+            </div>
+          </div>
+          {{else}}
+          <p class="empty-state">No sentiment data available</p>
+          {{/if}}
+        </div>
+
+        <div>
+          <h3 style="font-size: 11px; font-weight: 600; margin-bottom: 12px; color: #2c3e50;">Visibility Score Interpretation</h3>
+          <p style="font-size: 10px; color: #6c757d; margin-bottom: 8px; line-height: 1.5;">
+            Your Web Visibility Index of <strong style="color: #0070f3;">{{webVisibility}}%</strong> represents how prominently your brand appears across analyzed web sources.
+          </p>
+          <div class="score-legend">
+            <span class="score-badge score-excellent">75%+ Excellent</span>
+            <span class="score-badge score-good">50-74% Good</span>
+            <span class="score-badge score-fair">25-49% Fair</span>
+            <span class="score-badge score-poor">&lt;25% Poor</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Brand Mentions (New Page) -->
+    {{#if brandMentions.length}}
+    <div class="section page-break">
+      <h2 class="section-title">Top Brand Mentions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50%;">Source</th>
+            <th style="width: 25%;">Authority</th>
+            <th style="width: 25%;">Sentiment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each brandMentions}}
+          <tr>
+            <td>
+              <div class="url-cell" title="{{url}}">{{title}}</div>
+              <div class="url-subtitle">{{url}}</div>
+            </td>
+            <td class="authority-cell">{{authorityFormatted}}</td>
+            <td class="sentiment-cell">
+              <span class="score-badge large {{sentimentClass}}">{{sentiment}}</span>
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    {{/if}}
+
+    <!-- AI Visibility Analysis (Page Break) -->
+    <div class="section page-break">
+      <h2 class="section-title">AI Visibility Analysis</h2>
+
+      {{#if shareOfVoiceByPlatform.length}}
+      <h3 style="font-size: 11px; font-weight: 600; margin-bottom: 12px; color: #2c3e50;">Share of Voice by Platform</h3>
+      <div class="platform-grid">
+        {{#each shareOfVoiceByPlatform}}
+        <div class="platform-card">
+          <div class="platform-name">{{platform}}</div>
+          <div class="platform-value">{{percentage}}%</div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{#if competitors.length}}
+      <h3 style="font-size: 11px; font-weight: 600; margin: 20px 0 12px; color: #2c3e50;">Competitor Comparison</h3>
+      <div style="max-width: 500px;">
+        {{#each competitors}}
+        <div class="competitor-row">
+          <div class="competitor-name">{{name}}</div>
+          <div class="competitor-bar-container">
+            <div class="competitor-bar">
+              <div class="competitor-bar-fill {{#if isBrand}}brand{{/if}}" style="width: {{shareOfVoice}}%"></div>
+            </div>
+          </div>
+          <div class="competitor-value">{{shareOfVoice}}%</div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- Citation Gaps (New Page) -->
+    {{#if citationGaps.length}}
+    <div class="section page-break">
+      <h2 class="section-title">Citation Gap Opportunities</h2>
+      <p style="font-size: 10px; color: #6c757d; margin-bottom: 15px; line-height: 1.5;">
+        These high-authority sources mention your competitors but not your brand. Consider outreach for potential visibility gains.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 45%;">Source</th>
+            <th style="width: 15%;">Authority</th>
+            <th style="width: 40%;">Competitors Mentioned</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each citationGaps}}
+          <tr>
+            <td>
+              <div class="url-cell" title="{{url}}">{{title}}</div>
+              <div class="url-subtitle">{{url}}</div>
+            </td>
+            <td class="authority-cell">{{authorityFormatted}}</td>
+            <td class="competitors-cell">{{competitorsJoined}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    {{/if}}
+
+    <!-- How to Interpret Your Results (New Page) -->
+    <div class="section page-break">
+      <div class="interpretation-section">
+        <h2 class="interpretation-title">How to Interpret Your Results</h2>
+
+        <div class="interpretation-subsection">
+          <h3 class="interpretation-subtitle">Why This Report Matters</h3>
+          <p class="interpretation-text">
+            When users ask AI assistants questions like "What's the best [your industry]?", the AI pulls answers from trusted web sources. If your brand isn't mentioned in those sources, you're invisible to AI-driven discovery. Even if you rank well in traditional search, the AI won't find you. AI based ranking and scoring is analogous to a credit rating: it's not what you say about yourself, but what trusted external sources say about you. Just as credit bureaus assess your financial reputation through third-party data, this score measures your brand's reputation through the sources AI models rely on.
+          </p>
+        </div>
+
+        <div class="interpretation-subsection">
+          <h3 class="interpretation-subtitle">Your Key Metrics</h3>
+          <div class="metric-definition">
+            <span class="metric-definition-name">Combined Visibility</span>
+            <span class="metric-definition-desc">Blends web presence and AI share of voice into one convenient score.</span>
+          </div>
+          <div class="metric-definition">
+            <span class="metric-definition-name">Web Visibility Index</span>
+            <span class="metric-definition-desc">The percentage of high-authority sources that mention your brand. Think of it as your "citation rate" across the web.</span>
+          </div>
+          <div class="metric-definition">
+            <span class="metric-definition-name">AI Share of Voice</span>
+            <span class="metric-definition-desc">How often AI platforms mention your brand vs. competitors when answering relevant queries.</span>
+          </div>
+          <div class="metric-definition">
+            <span class="metric-definition-name">Citation Gaps</span>
+            <span class="metric-definition-desc">The most actionable insight. This relates to sources that mention your competitors but not you. These are concrete outreach targets.</span>
+          </div>
+        </div>
+
+        <div class="interpretation-subsection">
+          <h3 class="interpretation-subtitle">What To Do Next</h3>
+          <ul class="next-steps-list">
+            <li>Review the URLs of citation gaps. Sometimes information is misinterpreted. Look at your citation gaps and prioritize by authority score.</li>
+            <li>Reach out to high-authority sources for mentions, reviews, or features.</li>
+            <li>Address any negative sentiment through reputation management.</li>
+            <li>Re-run this audit quarterly to track improvement.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p class="footer-text">
+      Generated by <span class="footer-logo">NexusPipe</span> &bull; {{generatedAt}}
+    </p>
+  </div>
+</body>
+</html>

@@ -28,6 +28,7 @@ import {
 } from "@/server/services/metrics";
 import { generateInsights } from "@/server/services/insights";
 import { getFirstMentionSnippet } from "@/server/services/text-utils";
+import { generatePDFReport, prepareReportData } from "@/server/services/pdf-report";
 
 export const auditRouter = createTRPCRouter({
   /**
@@ -637,5 +638,108 @@ export const auditRouter = createTRPCRouter({
       });
 
       return insights;
+    }),
+
+  /**
+   * Generate a PDF report for a completed audit.
+   */
+  generateReport: protectedProcedure
+    .input(auditIdSchema)
+    .mutation(async ({ ctx, input }) => {
+      const audit = await ctx.db.audit.findUnique({
+        where: { id: input.id },
+        include: {
+          competitors: true,
+          sources: true,
+          aiPlatformQueries: true,
+        },
+      });
+
+      if (!audit) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Audit not found",
+        });
+      }
+
+      if (audit.userId !== ctx.userId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Access denied",
+        });
+      }
+
+      if (audit.status !== "COMPLETED") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Audit must be completed to generate a report",
+        });
+      }
+
+      // Calculate all metrics (same as getResults)
+      const visibilityIndex = calculateVisibilityIndex(audit.sources);
+      const citationGaps = findCitationGaps(audit.sources);
+      const sentimentBreakdown = calculateSentimentBreakdown(audit.sources);
+      const stats = calculateAuditStats(audit.sources);
+      const shareOfVoice = calculateShareOfVoice(
+        audit.aiPlatformQueries,
+        audit.competitors
+      );
+      const combinedVisibilityScore = calculateCombinedVisibilityScore(
+        visibilityIndex,
+        shareOfVoice.brandShareOfVoice
+      );
+
+      // Get brand mentions
+      const brandMentions = audit.sources
+        .filter((s) => s.mentionsBrand && s.analyzedAt)
+        .sort((a, b) => (b.authorityScore ?? 0) - (a.authorityScore ?? 0))
+        .slice(0, 10)
+        .map((source) => ({
+          id: source.id,
+          url: source.url,
+          title: source.title,
+          authorityScore: source.authorityScore,
+          sentiment: source.sentiment,
+          mentionSnippet:
+            source.mentionSnippet ??
+            getFirstMentionSnippet(source.markdown, audit.brandName),
+        }));
+
+      // Prepare report data
+      const reportData = prepareReportData(
+        {
+          id: audit.id,
+          brandName: audit.brandName,
+          createdAt: audit.createdAt,
+          industryIntent: audit.industryIntent,
+          aiTestQueries: audit.aiTestQueries,
+        },
+        {
+          visibilityIndex,
+          combinedVisibilityScore,
+          sentimentBreakdown,
+          stats,
+          brandMentions,
+          citationGaps,
+          shareOfVoice,
+        }
+      );
+
+      // Generate PDF
+      const pdfBuffer = await generatePDFReport(reportData);
+
+      // Return as base64 for download
+      const sanitizedBrandName = audit.brandName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      return {
+        filename: `nexuspipe-report-${sanitizedBrandName}-${Date.now()}.pdf`,
+        data: pdfBuffer.toString("base64"),
+        contentType: "application/pdf",
+      };
     }),
 });
